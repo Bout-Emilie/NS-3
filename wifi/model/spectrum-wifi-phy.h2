@@ -1,0 +1,98 @@
+/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+ /*
+  * Copyright (c) 2005,2006 INRIA
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 as
+  * published by the Free Software Foundation;
+  *
+  * This program is distributed in the hope that it will be useful,
+  * but WITHOUT ANY WARRANTY; without even the implied warranty of
+  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  * GNU General Public License for more details.
+  *
+  * You should have received a copy of the GNU General Public License
+  * along with this program; if not, write to the Free Software
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+  * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
+  *          Ghada Badawy <gbadawy@gmail.com>
+  *          Sébastien Deronne <sebastien.deronne@gmail.com>
+  *
+  * Ported from yans-wifi-phy.h by several contributors starting
+  * with Nicola Baldo and Dean Armstrong
+  */
+ 
+ #ifndef SPECTRUM_WIFI_PHY_H
+ #define SPECTRUM_WIFI_PHY_H
+ 
+ #include "ns3/antenna-model.h"
+ #include "ns3/spectrum-channel.h"
+ #include "ns3/spectrum-model.h"
+ #include "wifi-phy.h"
+ 
+ namespace ns3 {
+ 
+ class WifiSpectrumPhyInterface;
+ class WifiPpdu;
+ 
+ class SpectrumWifiPhy : public WifiPhy
+ {
+ public:
+   static TypeId GetTypeId (void);
+ 
+   SpectrumWifiPhy ();
+   virtual ~SpectrumWifiPhy ();
+ 
+   // Implementation of pure virtual method.
+   void StartTx (Ptr<WifiPpdu> ppdu);
+   Ptr<Channel> GetChannel (void) const;
+ 
+   void SetChannel (const Ptr<SpectrumChannel> channel);
+ 
+   void StartRx (Ptr<SpectrumSignalParameters> rxParams);
+ 
+   uint16_t GetCenterFrequencyForChannelWidth (WifiTxVector txVector) const;
+ 
+   void CreateWifiSpectrumPhyInterface (Ptr<NetDevice> device);
+   void SetAntenna (const Ptr<AntennaModel> antenna);
+   Ptr<AntennaModel> GetRxAntenna (void) const;
+   Ptr<const SpectrumModel> GetRxSpectrumModel () const;
+ 
+   uint32_t GetBandBandwidth (void) const;
+ 
+   uint16_t GetGuardBandwidth (uint16_t currentChannelWidth) const;
+ 
+   typedef void (* SignalArrivalCallback) (bool signalType, uint32_t senderNodeId, double rxPower, Time duration);
+ 
+   // The following four methods call to the base WifiPhy class method
+   // but also generate a new SpectrumModel if called during runtime
+   virtual void SetChannelNumber (uint8_t id);
+   virtual void SetFrequency (uint16_t freq);
+   virtual void SetChannelWidth (uint16_t channelwidth);
+   virtual void ConfigureStandard (WifiPhyStandard standard);
+ 
+ protected:
+   // Inherited
+   void DoDispose (void);
+   void DoInitialize (void);
+ 
+ 
+ private:
+   Ptr<SpectrumValue> GetTxPowerSpectralDensity (uint16_t centerFrequency, uint16_t channelWidth, double txPowerW, WifiModulationClass modulationClass) const;
+ 
+   void ResetSpectrumModel (void);
+ 
+   Ptr<SpectrumChannel> m_channel;        
+ 
+   Ptr<WifiSpectrumPhyInterface> m_wifiSpectrumPhyInterface; 
+   Ptr<AntennaModel> m_antenna;                              
+   mutable Ptr<const SpectrumModel> m_rxSpectrumModel;       
+   bool m_disableWifiReception;                              
+   TracedCallback<bool, uint32_t, double, Time> m_signalCb;  
+ 
+ };
+ 
+ } //namespace ns3
+ 
+ #endif /* SPECTRUM_WIFI_PHY_H */

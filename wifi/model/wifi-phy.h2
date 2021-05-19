@@ -1,0 +1,552 @@
+/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+ /*
+  * Copyright (c) 2005,2006 INRIA
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 as
+  * published by the Free Software Foundation;
+  *
+  * This program is distributed in the hope that it will be useful,
+  * but WITHOUT ANY WARRANTY; without even the implied warranty of
+  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  * GNU General Public License for more details.
+  *
+  * You should have received a copy of the GNU General Public License
+  * along with this program; if not, write to the Free Software
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+  * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
+  *          Sébastien Deronne <sebastien.deronne@gmail.com>
+  */
+ 
+ #ifndef WIFI_PHY_H
+ #define WIFI_PHY_H
+ 
+ #include "ns3/event-id.h"
+ #include "ns3/deprecated.h"
+ #include "ns3/error-model.h"
+ #include "wifi-mpdu-type.h"
+ #include "wifi-phy-standard.h"
+ #include "interference-helper.h"
+ #include "wifi-phy-state-helper.h"
+ 
+ namespace ns3 {
+ 
+ #define HE_PHY 125
+ #define VHT_PHY 126
+ #define HT_PHY 127
+ 
+ class Channel;
+ class NetDevice;
+ class MobilityModel;
+ class WifiPhyStateHelper;
+ class FrameCaptureModel;
+ class PreambleDetectionModel;
+ class WifiRadioEnergyModel;
+ class UniformRandomVariable;
+ class WifiPsdu;
+ class WifiPpdu;
+ 
+ enum WifiPhyRxfailureReason
+ {
+   UNKNOWN = 0,
+   UNSUPPORTED_SETTINGS,
+   CHANNEL_SWITCHING,
+   RXING,
+   TXING,
+   SLEEPING,
+   BUSY_DECODING_PREAMBLE,
+   PREAMBLE_DETECT_FAILURE,
+   RECEPTION_ABORTED_BY_TX,
+   L_SIG_FAILURE,
+   SIG_A_FAILURE,
+   PREAMBLE_DETECTION_PACKET_SWITCH,
+   FRAME_CAPTURE_PACKET_SWITCH,
+   OBSS_PD_CCA_RESET
+ };
+ 
+ inline std::ostream& operator<< (std::ostream& os, WifiPhyRxfailureReason reason)
+ {
+   switch (reason)
+     {
+     case UNSUPPORTED_SETTINGS:
+       return (os << "UNSUPPORTED_SETTINGS");
+     case CHANNEL_SWITCHING:
+       return (os << "CHANNEL_SWITCHING");
+     case RXING:
+       return (os << "RXING");
+     case TXING:
+       return (os << "TXING");
+     case SLEEPING:
+       return (os << "SLEEPING");
+     case BUSY_DECODING_PREAMBLE:
+       return (os << "BUSY_DECODING_PREAMBLE");
+     case PREAMBLE_DETECT_FAILURE:
+       return (os << "PREAMBLE_DETECT_FAILURE");
+     case RECEPTION_ABORTED_BY_TX:
+       return (os << "RECEPTION_ABORTED_BY_TX");
+     case L_SIG_FAILURE:
+       return (os << "L_SIG_FAILURE");
+     case SIG_A_FAILURE:
+       return (os << "SIG_A_FAILURE");
+     case PREAMBLE_DETECTION_PACKET_SWITCH:
+       return (os << "PREAMBLE_DETECTION_PACKET_SWITCH");
+     case FRAME_CAPTURE_PACKET_SWITCH:
+       return (os << "FRAME_CAPTURE_PACKET_SWITCH");
+     case OBSS_PD_CCA_RESET:
+       return (os << "OBSS_PD_CCA_RESET");
+     case UNKNOWN:
+     default:
+       NS_FATAL_ERROR ("Unknown reason");
+       return (os << "UNKNOWN");
+     }
+ }
+ 
+ 
+ struct SignalNoiseDbm
+ {
+   double signal; 
+   double noise; 
+ };
+ 
+ struct MpduInfo
+ {
+   MpduType type; 
+   uint32_t mpduRefNumber; 
+ };
+ 
+ struct HePreambleParameters
+ {
+   double rssiW; 
+   uint8_t bssColor; 
+ };
+ 
+ class WifiPhy : public Object
+ {
+ public:
+   static TypeId GetTypeId (void);
+ 
+   WifiPhy ();
+   virtual ~WifiPhy ();
+ 
+   Ptr<WifiPhyStateHelper> GetState (void) const;
+ 
+   void SetReceiveOkCallback (RxOkCallback callback);
+   void SetReceiveErrorCallback (RxErrorCallback callback);
+ 
+   void RegisterListener (WifiPhyListener *listener);
+   void UnregisterListener (WifiPhyListener *listener);
+ 
+   void SetCapabilitiesChangedCallback (Callback<void> callback);
+ 
+   void StartReceivePreamble (Ptr<WifiPpdu> ppdu, double rxPowerW);
+ 
+   void StartReceiveHeader (Ptr<Event> event);
+ 
+   void ContinueReceiveHeader (Ptr<Event> event);
+ 
+   void StartReceivePayload (Ptr<Event> event);
+ 
+   void EndReceive (Ptr<Event> event);
+ 
+   void ResetReceive (Ptr<Event> event);
+ 
+   void EndReceiveInterBss (void);
+ 
+   void Send (Ptr<const WifiPsdu> psdu, WifiTxVector txVector);
+ 
+   virtual void StartTx (Ptr<WifiPpdu> ppdu) = 0;
+ 
+   void SetSleepMode (void);
+   void ResumeFromSleep (void);
+   void SetOffMode (void);
+   void ResumeFromOff (void);
+ 
+   bool IsStateIdle (void) const;
+   bool IsStateCcaBusy (void) const;
+   bool IsStateRx (void) const;
+   bool IsStateTx (void) const;
+   bool IsStateSwitching (void) const;
+   bool IsStateSleep (void) const;
+   bool IsStateOff (void) const;
+ 
+   Time GetDelayUntilIdle (void);
+ 
+   Time GetLastRxStartTime (void) const;
+   Time GetLastRxEndTime (void) const;
+ 
+   static Time CalculateTxDuration (uint32_t size, WifiTxVector txVector, uint16_t frequency);
+ 
+   static Time CalculatePhyPreambleAndHeaderDuration (WifiTxVector txVector);
+   static Time GetPreambleDetectionDuration (void);
+   static Time GetPhyTrainingSymbolDuration (WifiTxVector txVector);
+   static WifiMode GetHtPhyHeaderMode ();
+   static WifiMode GetVhtPhyHeaderMode ();
+   static WifiMode GetHePhyHeaderMode ();
+   static Time GetPhyHtSigHeaderDuration (WifiPreamble preamble);
+   static Time GetPhySigA1Duration (WifiPreamble preamble);
+   static Time GetPhySigA2Duration (WifiPreamble preamble);
+   static Time GetPhySigBDuration (WifiPreamble preamble);
+   static WifiMode GetPhyHeaderMode (WifiTxVector txVector);
+   static Time GetPhyHeaderDuration (WifiTxVector txVector);
+   static Time GetPhyPreambleDuration (WifiTxVector txVector);
+   static Time GetPayloadDuration (uint32_t size, WifiTxVector txVector, uint16_t frequency, MpduType mpdutype = NORMAL_MPDU);
+   static Time GetPayloadDuration (uint32_t size, WifiTxVector txVector, uint16_t frequency, MpduType mpdutype, bool incFlag, uint32_t &totalAmpduSize, double &totalAmpduNumSymbols);
+   static Time GetStartOfPacketDuration (WifiTxVector txVector);
+ 
+   uint8_t GetNModes (void) const;
+   WifiMode GetMode (uint8_t mode) const;
+   bool IsModeSupported (WifiMode mode) const;
+   bool IsMcsSupported (WifiMode mcs) const;
+   bool IsMcsSupported (WifiModulationClass mc, uint8_t mcs) const;
+ 
+   double CalculateSnr (WifiTxVector txVector, double ber) const;
+ 
+   uint8_t GetNBssMembershipSelectors (void) const;
+   uint8_t GetBssMembershipSelector (uint8_t selector) const;
+   uint8_t GetNMcs (void) const;
+   WifiMode GetMcs (uint8_t mcs) const;
+   WifiMode GetMcs (WifiModulationClass modulation, uint8_t mcs) const;
+   WifiMode GetHtMcs (uint8_t mcs) const;
+   WifiMode GetVhtMcs (uint8_t mcs) const;
+   WifiMode GetHeMcs (uint8_t mcs) const;
+ 
+   virtual void SetChannelNumber (uint8_t id);
+   uint8_t GetChannelNumber (void) const;
+   Time GetChannelSwitchDelay (void) const;
+ 
+   virtual void ConfigureStandard (WifiPhyStandard standard);
+ 
+   WifiPhyStandard GetStandard (void) const;
+ 
+   bool DefineChannelNumber (uint8_t channelNumber, WifiPhyStandard standard, uint16_t frequency, uint16_t channelWidth);
+ 
+   typedef std::pair<uint8_t, WifiPhyStandard> ChannelNumberStandardPair;
+   typedef std::pair<uint16_t, uint16_t> FrequencyWidthPair;
+ 
+   virtual Ptr<Channel> GetChannel (void) const = 0;
+ 
+   static WifiMode GetDsssRate1Mbps ();
+   static WifiMode GetDsssRate2Mbps ();
+   static WifiMode GetDsssRate5_5Mbps ();
+   static WifiMode GetDsssRate11Mbps ();
+   static WifiMode GetErpOfdmRate6Mbps ();
+   static WifiMode GetErpOfdmRate9Mbps ();
+   static WifiMode GetErpOfdmRate12Mbps ();
+   static WifiMode GetErpOfdmRate18Mbps ();
+   static WifiMode GetErpOfdmRate24Mbps ();
+   static WifiMode GetErpOfdmRate36Mbps ();
+   static WifiMode GetErpOfdmRate48Mbps ();
+   static WifiMode GetErpOfdmRate54Mbps ();
+   static WifiMode GetOfdmRate6Mbps ();
+   static WifiMode GetOfdmRate9Mbps ();
+   static WifiMode GetOfdmRate12Mbps ();
+   static WifiMode GetOfdmRate18Mbps ();
+   static WifiMode GetOfdmRate24Mbps ();
+   static WifiMode GetOfdmRate36Mbps ();
+   static WifiMode GetOfdmRate48Mbps ();
+   static WifiMode GetOfdmRate54Mbps ();
+   static WifiMode GetOfdmRate3MbpsBW10MHz ();
+   static WifiMode GetOfdmRate4_5MbpsBW10MHz ();
+   static WifiMode GetOfdmRate6MbpsBW10MHz ();
+   static WifiMode GetOfdmRate9MbpsBW10MHz ();
+   static WifiMode GetOfdmRate12MbpsBW10MHz ();
+   static WifiMode GetOfdmRate18MbpsBW10MHz ();
+   static WifiMode GetOfdmRate24MbpsBW10MHz ();
+   static WifiMode GetOfdmRate27MbpsBW10MHz ();
+   static WifiMode GetOfdmRate1_5MbpsBW5MHz ();
+   static WifiMode GetOfdmRate2_25MbpsBW5MHz ();
+   static WifiMode GetOfdmRate3MbpsBW5MHz ();
+   static WifiMode GetOfdmRate4_5MbpsBW5MHz ();
+   static WifiMode GetOfdmRate6MbpsBW5MHz ();
+   static WifiMode GetOfdmRate9MbpsBW5MHz ();
+   static WifiMode GetOfdmRate12MbpsBW5MHz ();
+   static WifiMode GetOfdmRate13_5MbpsBW5MHz ();
+ 
+   static WifiMode GetHtMcs0 ();
+   static WifiMode GetHtMcs1 ();
+   static WifiMode GetHtMcs2 ();
+   static WifiMode GetHtMcs3 ();
+   static WifiMode GetHtMcs4 ();
+   static WifiMode GetHtMcs5 ();
+   static WifiMode GetHtMcs6 ();
+   static WifiMode GetHtMcs7 ();
+   static WifiMode GetHtMcs8 ();
+   static WifiMode GetHtMcs9 ();
+   static WifiMode GetHtMcs10 ();
+   static WifiMode GetHtMcs11 ();
+   static WifiMode GetHtMcs12 ();
+   static WifiMode GetHtMcs13 ();
+   static WifiMode GetHtMcs14 ();
+   static WifiMode GetHtMcs15 ();
+   static WifiMode GetHtMcs16 ();
+   static WifiMode GetHtMcs17 ();
+   static WifiMode GetHtMcs18 ();
+   static WifiMode GetHtMcs19 ();
+   static WifiMode GetHtMcs20 ();
+   static WifiMode GetHtMcs21 ();
+   static WifiMode GetHtMcs22 ();
+   static WifiMode GetHtMcs23 ();
+   static WifiMode GetHtMcs24 ();
+   static WifiMode GetHtMcs25 ();
+   static WifiMode GetHtMcs26 ();
+   static WifiMode GetHtMcs27 ();
+   static WifiMode GetHtMcs28 ();
+   static WifiMode GetHtMcs29 ();
+   static WifiMode GetHtMcs30 ();
+   static WifiMode GetHtMcs31 ();
+ 
+   static WifiMode GetVhtMcs0 ();
+   static WifiMode GetVhtMcs1 ();
+   static WifiMode GetVhtMcs2 ();
+   static WifiMode GetVhtMcs3 ();
+   static WifiMode GetVhtMcs4 ();
+   static WifiMode GetVhtMcs5 ();
+   static WifiMode GetVhtMcs6 ();
+   static WifiMode GetVhtMcs7 ();
+   static WifiMode GetVhtMcs8 ();
+   static WifiMode GetVhtMcs9 ();
+ 
+   static WifiMode GetHeMcs0 ();
+   static WifiMode GetHeMcs1 ();
+   static WifiMode GetHeMcs2 ();
+   static WifiMode GetHeMcs3 ();
+   static WifiMode GetHeMcs4 ();
+   static WifiMode GetHeMcs5 ();
+   static WifiMode GetHeMcs6 ();
+   static WifiMode GetHeMcs7 ();
+   static WifiMode GetHeMcs8 ();
+   static WifiMode GetHeMcs9 ();
+   static WifiMode GetHeMcs10 ();
+   static WifiMode GetHeMcs11 ();
+ 
+   void NotifyTxBegin (Ptr<const WifiPsdu> psdu, double txPowerW);
+   void NotifyTxEnd (Ptr<const WifiPsdu> psdu);
+   void NotifyTxDrop (Ptr<const WifiPsdu> psdu);
+   void NotifyRxBegin (Ptr<const WifiPsdu> psdu);
+   void NotifyRxEnd (Ptr<const WifiPsdu> psdu);
+   void NotifyRxDrop (Ptr<const WifiPsdu> psdu, WifiPhyRxfailureReason reason);
+ 
+   void NotifyMonitorSniffRx (Ptr<const WifiPsdu> psdu,
+                              uint16_t channelFreqMhz,
+                              WifiTxVector txVector,
+                              SignalNoiseDbm signalNoise,
+                              std::vector<bool> statusPerMpdu);
+ 
+   typedef void (* MonitorSnifferRxCallback)(Ptr<const Packet> packet,
+                                             uint16_t channelFreqMhz,
+                                             WifiTxVector txVector,
+                                             MpduInfo aMpdu,
+                                             SignalNoiseDbm signalNoise);
+ 
+   void NotifyMonitorSniffTx (Ptr<const WifiPsdu> psdu,
+                              uint16_t channelFreqMhz,
+                              WifiTxVector txVector);
+ 
+   typedef void (* MonitorSnifferTxCallback)(const Ptr<const Packet> packet,
+                                             uint16_t channelFreqMhz,
+                                             WifiTxVector txVector,
+                                             MpduInfo aMpdu);
+ 
+   typedef void (* PsduTxBeginCallback)(Ptr<const WifiPsdu> psdu, WifiTxVector txVector, double txPowerW);
+ 
+   void NotifyEndOfHePreamble (HePreambleParameters params);
+ 
+   typedef void (* EndOfHePreambleCallback)(HePreambleParameters params);
+ 
+   typedef void (* PhyRxPayloadBeginTracedCallback)(WifiTxVector txVector, Time psduDuration);
+ 
+   virtual int64_t AssignStreams (int64_t stream);
+ 
+   void SetEdThreshold (double threshold);
+   void SetRxSensitivity (double threshold);
+   double GetRxSensitivity (void) const;
+   void SetCcaEdThreshold (double threshold);
+   double GetCcaEdThreshold (void) const;
+   void SetRxNoiseFigure (double noiseFigureDb);
+   void SetTxPowerStart (double start);
+   double GetTxPowerStart (void) const;
+   void SetTxPowerEnd (double end);
+   double GetTxPowerEnd (void) const;
+   void SetNTxPower (uint8_t n);
+   uint8_t GetNTxPower (void) const;
+   void SetTxGain (double gain);
+   double GetTxGain (void) const;
+   void SetRxGain (double gain);
+   double GetRxGain (void) const;
+ 
+   void SetDevice (const Ptr<NetDevice> device);
+   Ptr<NetDevice> GetDevice (void) const;
+   void SetMobility (const Ptr<MobilityModel> mobility);
+   Ptr<MobilityModel> GetMobility (void) const;
+ 
+   virtual void SetFrequency (uint16_t freq);
+   uint16_t GetFrequency (void) const;
+   void SetNumberOfAntennas (uint8_t antennas);
+   uint8_t GetNumberOfAntennas (void) const;
+   void SetMaxSupportedTxSpatialStreams (uint8_t streams);
+   uint8_t GetMaxSupportedTxSpatialStreams (void) const;
+   void SetMaxSupportedRxSpatialStreams (uint8_t streams);
+   uint8_t GetMaxSupportedRxSpatialStreams (void) const;
+   void SetShortGuardInterval (bool shortGuardInterval);
+   bool GetShortGuardInterval (void) const;
+   void SetGuardInterval (Time guardInterval);
+   Time GetGuardInterval (void) const;
+   void SetGreenfield (bool greenfield);
+   bool GetGreenfield (void) const;
+   void SetShortPhyPreambleSupported (bool preamble);
+   bool GetShortPhyPreambleSupported (void) const;
+ 
+   void SetErrorRateModel (const Ptr<ErrorRateModel> rate);
+   void SetPostReceptionErrorModel (const Ptr<ErrorModel> em);
+   void SetFrameCaptureModel (const Ptr<FrameCaptureModel> frameCaptureModel);
+   void SetPreambleDetectionModel (const Ptr<PreambleDetectionModel> preambleDetectionModel);
+   void SetWifiRadioEnergyModel (const Ptr<WifiRadioEnergyModel> wifiRadioEnergyModel);
+ 
+   uint16_t GetChannelWidth (void) const;
+   virtual void SetChannelWidth (uint16_t channelWidth);
+   void AddSupportedChannelWidth (uint16_t width);
+   std::vector<uint16_t> GetSupportedChannelWidthSet (void) const;
+ 
+   double GetPowerDbm (uint8_t power) const;
+ 
+   void ResetCca (bool powerRestricted, double txPowerMaxSiso = 0, double txPowerMaxMimo = 0);
+   double GetTxPowerForTransmission (WifiTxVector txVector) const;
+   void NotifyChannelAccessRequested (void);
+ 
+ 
+ protected:
+   // Inherited
+   virtual void DoInitialize (void);
+   virtual void DoDispose (void);
+ 
+   bool DoChannelSwitch (uint8_t id);
+   bool DoFrequencySwitch (uint16_t frequency);
+ 
+   void SwitchMaybeToCcaBusy (void);
+ 
+   InterferenceHelper m_interference;   
+   Ptr<UniformRandomVariable> m_random; 
+   Ptr<WifiPhyStateHelper> m_state;     
+ 
+   uint32_t m_txMpduReferenceNumber;    
+   uint32_t m_rxMpduReferenceNumber;    
+ 
+   EventId m_endRxEvent;                
+   EventId m_endPhyRxEvent;             
+   EventId m_endPreambleDetectionEvent; 
+ 
+   EventId m_endTxEvent;                
+ 
+ private:
+   void InitializeFrequencyChannelNumber (void);
+   void Configure80211a (void);
+   void Configure80211b (void);
+   void Configure80211g (void);
+   void Configure80211_10Mhz (void);
+   void Configure80211_5Mhz ();
+   void ConfigureHolland (void);
+   void Configure80211n (void);
+   void Configure80211ac (void);
+   void Configure80211ax (void);
+   void ConfigureHtDeviceMcsSet (void);
+   void PushMcs (WifiMode mode);
+   void RebuildMcsMap (void);
+   void ConfigureDefaultsForStandard (WifiPhyStandard standard);
+   void ConfigureChannelForStandard (WifiPhyStandard standard);
+ 
+   uint8_t FindChannelNumberForFrequencyWidth (uint16_t frequency, uint16_t width) const;
+   FrequencyWidthPair GetFrequencyWidthForChannelNumberStandard (uint8_t channelNumber, WifiPhyStandard standard) const;
+ 
+   void AbortCurrentReception (WifiPhyRxfailureReason reason);
+ 
+   void MaybeCcaBusyDuration (void);
+ 
+   void StartRx (Ptr<Event> event, double rxPowerW);
+   std::pair<bool, SignalNoiseDbm> GetReceptionStatus (Ptr<const WifiPsdu> psdu,
+                                                       Ptr<Event> event,
+                                                       Time relativeMpduStart,
+                                                       Time mpduDuration);
+ 
+   TracedCallback<Ptr<const Packet>, double > m_phyTxBeginTrace;
+   TracedCallback<Ptr<const WifiPsdu>, WifiTxVector, double /* TX power (W) */> m_phyTxPsduBeginTrace;
+ 
+   TracedCallback<Ptr<const Packet> > m_phyTxEndTrace;
+ 
+   TracedCallback<Ptr<const Packet> > m_phyTxDropTrace;
+ 
+   TracedCallback<Ptr<const Packet> > m_phyRxBeginTrace;
+ 
+   TracedCallback<WifiTxVector, Time> m_phyRxPayloadBeginTrace;
+ 
+   TracedCallback<Ptr<const Packet> > m_phyRxEndTrace;
+ 
+   TracedCallback<Ptr<const Packet>, WifiPhyRxfailureReason > m_phyRxDropTrace;
+ 
+   TracedCallback<Ptr<const Packet>, uint16_t, WifiTxVector, MpduInfo, SignalNoiseDbm> m_phyMonitorSniffRxTrace;
+ 
+   TracedCallback<Ptr<const Packet>, uint16_t, WifiTxVector, MpduInfo> m_phyMonitorSniffTxTrace;
+ 
+   TracedCallback<HePreambleParameters> m_phyEndOfHePreambleTrace;
+ 
+   WifiModeList m_deviceRateSet;
+   WifiModeList m_deviceMcsSet; 
+   std::map<WifiModulationClass, std::map<uint8_t /* MCS value */, uint8_t /* index */>> m_mcsIndexMap;
+ 
+   std::vector<uint8_t> m_bssMembershipSelectorSet; 
+ 
+   WifiPhyStandard m_standard;               
+   bool m_isConstructed;                     
+   uint16_t m_channelCenterFrequency;        
+   uint16_t m_initialFrequency;              
+   bool m_frequencyChannelNumberInitialized; 
+   uint16_t m_channelWidth;                  
+ 
+   double   m_rxSensitivityW;      
+   double   m_ccaEdThresholdW;     
+   double   m_txGainDb;            
+   double   m_rxGainDb;            
+   double   m_txPowerBaseDbm;      
+   double   m_txPowerEndDbm;       
+   uint8_t  m_nTxPower;            
+ 
+   bool m_powerRestricted;        
+   double m_txPowerMaxSiso;       
+   double m_txPowerMaxMimo;       
+   bool m_channelAccessRequested; 
+ 
+   bool     m_greenfield;         
+   bool     m_shortGuardInterval; 
+   bool     m_shortPreamble;      
+ 
+   Time m_guardInterval; 
+ 
+   uint8_t m_numberOfAntennas;  
+   uint8_t m_txSpatialStreams;  
+   uint8_t m_rxSpatialStreams;  
+ 
+   typedef std::map<ChannelNumberStandardPair,FrequencyWidthPair> ChannelToFrequencyWidthMap; 
+   static ChannelToFrequencyWidthMap m_channelToFrequencyWidth;                               
+ 
+   std::vector<uint16_t> m_supportedChannelWidthSet; 
+   uint8_t               m_channelNumber;            
+   uint8_t               m_initialChannelNumber;     
+ 
+   Time m_channelSwitchDelay;     
+ 
+   Ptr<NetDevice>     m_device;   
+   Ptr<MobilityModel> m_mobility; 
+ 
+   Ptr<Event> m_currentEvent;                            
+   Ptr<FrameCaptureModel> m_frameCaptureModel;           
+   Ptr<PreambleDetectionModel> m_preambleDetectionModel; 
+   Ptr<WifiRadioEnergyModel> m_wifiRadioEnergyModel;     
+   Ptr<ErrorModel> m_postReceptionErrorModel;            
+   Time m_timeLastPreambleDetected;                      
+ 
+   Callback<void> m_capabilitiesChangedCallback;         
+ };
+ 
+ } //namespace ns3
+ 
+ #endif /* WIFI_PHY_H */
